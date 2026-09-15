@@ -1,0 +1,595 @@
+﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PEQ Generator</title>
+<style>
+  :root {
+    --bg: #f2f4f7;
+    --panel: #ffffff;
+    --border: #d0d5dd;
+    --text: #1d2939;
+    --muted: #667085;
+    --accent: #4f46e5;
+    --accent-dark: #4338ca;
+    --green: #12b76a;
+    --red: #f04438;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 24px 16px 60px;
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .subtitle { color: var(--muted); margin: 0 0 24px; font-size: 14px; }
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 18px 20px;
+    margin-bottom: 20px;
+  }
+  .panel h2 { font-size: 15px; margin: 0 0 12px; }
+  .dropzone {
+    border: 2px dashed var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    text-align: center;
+    color: var(--muted);
+    cursor: pointer;
+    transition: border-color .15s, background .15s;
+  }
+  .dropzone.drag { border-color: var(--accent); background: #f5f4ff; }
+  .dropzone input { display: none; }
+  .filename { margin-top: 10px; font-size: 13px; color: var(--text); font-weight: 600; }
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-items: flex-end;
+    margin-top: 16px;
+  }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+  .field label { color: var(--muted); }
+  .field input, .field select {
+    padding: 7px 9px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 14px;
+    width: 110px;
+  }
+  .hint { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  .file-list { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+  .file-list li {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: #f7f8fa;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+  .file-list li .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-list li .file-points { color: var(--muted); font-size: 12px; }
+  button {
+    font: inherit;
+    cursor: pointer;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: #fff;
+    padding: 8px 14px;
+    font-size: 14px;
+  }
+  button.primary {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: #fff;
+    font-weight: 600;
+  }
+  button.primary:hover { background: var(--accent-dark); }
+  button.primary:disabled { background: #b7b9c6; border-color: #b7b9c6; cursor: not-allowed; }
+  button.ghost { background: transparent; }
+  .const-note { font-size: 12px; color: var(--muted); margin-top: 14px; }
+  .error {
+    display: none;
+    background: #fef3f2;
+    border: 1px solid #fda29b;
+    color: #b42318;
+    padding: 10px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+  }
+  canvas { width: 100%; height: 380px; display: block; border-radius: 8px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #eaecf0; }
+  th { color: var(--muted); font-weight: 600; font-size: 12px; }
+  td input {
+    width: 90px;
+    padding: 5px 7px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 13px;
+  }
+  td.actions { width: 40px; }
+  .row-remove { color: var(--red); background: transparent; border: none; font-size: 16px; padding: 2px 6px; }
+  .table-actions { margin-top: 12px; display: flex; gap: 10px; }
+  textarea {
+    width: 100%;
+    min-height: 140px;
+    font-family: ui-monospace, Consolas, monospace;
+    font-size: 13px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    resize: vertical;
+  }
+  .export-actions { margin-top: 10px; display: flex; gap: 10px; align-items: center; }
+  .copied { color: var(--green); font-size: 13px; display: none; }
+  .empty-hint { color: var(--muted); font-size: 13px; padding: 20px 0; text-align: center; }
+  footer { text-align: center; color: var(--muted); font-size: 12px; margin-top: 30px; }
+  footer a { color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>PEQ Generator</h1>
+  <p class="subtitle">Frequenzgang-Datei hochladen &rarr; parametrische EQ-Bänder berechnen, die sie möglichst flach machen.</p>
+
+  <div class="error" id="errorBox"></div>
+
+  <div class="panel">
+    <h2>1. Mehrere Messungen zusammenführen (optional)</h2>
+    <p class="hint">Mehrere Frequenzgang-Dateien reinziehen (z.&nbsp;B. mehrere Sitz-/Mikrofonpositionen oder wiederholte
+      Messungen) &ndash; daraus wird eine einzelne Kurve berechnet, die du herunterladen oder direkt unten weiterverwenden
+      kannst.</p>
+    <div class="dropzone" id="mergeDropzone">
+      <div>Dateien hierher ziehen oder klicken zum Auswählen (mehrere möglich)</div>
+      <input type="file" id="mergeFileInput" accept=".txt,.csv,.frd,text/plain" multiple>
+    </div>
+    <ul class="file-list" id="mergeFileList"></ul>
+
+    <div class="controls" id="mergeControls" style="display:none;">
+      <div class="field">
+        <label for="mergeMethod">Methode</label>
+        <select id="mergeMethod">
+          <option value="median" selected>Median</option>
+          <option value="mean">Mittelwert</option>
+        </select>
+      </div>
+      <button class="ghost" id="mergeDownloadBtn">Herunterladen</button>
+      <button class="primary" id="mergeUseBtn">Für Berechnung verwenden</button>
+    </div>
+    <p class="const-note" id="mergeMethodNote" style="display:none;">Median nimmt pro Frequenzpunkt den mittleren Wert
+      aller Kurven &ndash; robuster gegen eine einzelne verrauschte/untypische Messung als der Mittelwert.</p>
+
+    <canvas id="mergeChart" style="display:none; margin-top:14px;"></canvas>
+  </div>
+
+  <div class="panel">
+    <h2>2. Frequenzgang laden</h2>
+    <div class="dropzone" id="dropzone">
+      <div>Datei hierher ziehen oder klicken zum Auswählen</div>
+      <div style="font-size:12px;margin-top:4px;">Textformat: zwei Spalten <code>Frequenz(Hz) dB</code>, z.&nbsp;B. Export aus hifi-apps.com / REW</div>
+      <div class="filename" id="filename"></div>
+      <input type="file" id="fileInput" accept=".txt,.csv,.frd,text/plain">
+    </div>
+
+    <div class="controls">
+      <div class="field">
+        <label for="fMin">Min. Frequenz (Hz)</label>
+        <input type="number" id="fMin" min="20" max="20000" step="1" value="20">
+      </div>
+      <div class="field">
+        <label for="fMax">Max. Frequenz (Hz)</label>
+        <input type="number" id="fMax" min="20" max="20000" step="1" value="20000">
+      </div>
+      <div class="field">
+        <label for="numBands">Anzahl Bänder</label>
+        <input type="number" id="numBands" min="1" max="40" step="1" value="8">
+      </div>
+      <button class="primary" id="computeBtn" disabled>Berechnen</button>
+    </div>
+    <p class="const-note">Feste Grenzen: Q 0.3&ndash;9.9 &middot; Gain &minus;15&ndash;+15&nbsp;dB (fest im Code hinterlegt).<br>
+    Tipp: Min./Max. einschränken, um z.&nbsp;B. nur den Hochtöner-Bereich (z.&nbsp;B. 2000&ndash;20000&nbsp;Hz) zu bearbeiten.</p>
+  </div>
+
+  <div class="panel">
+    <h2>3. Ergebnis</h2>
+    <canvas id="chart"></canvas>
+    <div class="empty-hint" id="emptyHint">Noch keine Datei geladen.</div>
+
+    <div id="tableWrap" style="display:none; margin-top:16px;">
+      <table>
+        <thead>
+          <tr><th>#</th><th>Freq (Hz)</th><th>Gain (dB)</th><th>Q</th><th></th></tr>
+        </thead>
+        <tbody id="bandsBody"></tbody>
+      </table>
+      <div class="table-actions">
+        <button class="ghost" id="addBandBtn">+ Band hinzufügen</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel" id="exportPanel" style="display:none;">
+    <h2>4. Export (Equalizer APO Format)</h2>
+    <textarea id="exportText" readonly></textarea>
+    <div class="export-actions">
+      <button id="copyBtn">In Zwischenablage kopieren</button>
+      <span class="copied" id="copiedNote">Kopiert ✓</span>
+    </div>
+  </div>
+
+  <footer>
+    Läuft komplett lokal im Browser, keine Uploads an einen Server. ·
+    <a href="https://github.com/jaakkopasanen/AutoEq" target="_blank" rel="noopener">Inspiriert von AutoEQ</a>
+  </footer>
+</div>
+
+<script src="app.js"></script>
+<script>
+'use strict';
+
+const state = {
+  points: null,
+  bands: [],
+  grid: null,
+  measured: null,
+  target: 0,
+};
+
+const el = {
+  dropzone: document.getElementById('dropzone'),
+  fileInput: document.getElementById('fileInput'),
+  filename: document.getElementById('filename'),
+  fMin: document.getElementById('fMin'),
+  fMax: document.getElementById('fMax'),
+  numBands: document.getElementById('numBands'),
+  computeBtn: document.getElementById('computeBtn'),
+  errorBox: document.getElementById('errorBox'),
+  chart: document.getElementById('chart'),
+  emptyHint: document.getElementById('emptyHint'),
+  tableWrap: document.getElementById('tableWrap'),
+  bandsBody: document.getElementById('bandsBody'),
+  addBandBtn: document.getElementById('addBandBtn'),
+  exportPanel: document.getElementById('exportPanel'),
+  exportText: document.getElementById('exportText'),
+  copyBtn: document.getElementById('copyBtn'),
+  copiedNote: document.getElementById('copiedNote'),
+  mergeDropzone: document.getElementById('mergeDropzone'),
+  mergeFileInput: document.getElementById('mergeFileInput'),
+  mergeFileList: document.getElementById('mergeFileList'),
+  mergeControls: document.getElementById('mergeControls'),
+  mergeMethod: document.getElementById('mergeMethod'),
+  mergeMethodNote: document.getElementById('mergeMethodNote'),
+  mergeDownloadBtn: document.getElementById('mergeDownloadBtn'),
+  mergeUseBtn: document.getElementById('mergeUseBtn'),
+  mergeChart: document.getElementById('mergeChart'),
+};
+
+const mergeState = {
+  files: [],   // { name, points }
+  grid: null,
+  merged: null,
+};
+
+function showError(msg) {
+  el.errorBox.textContent = msg;
+  el.errorBox.style.display = msg ? 'block' : 'none';
+}
+
+// Gemeinsamer Einstiegspunkt für "Datei hochgeladen" UND "zusammengeführte
+// Kurve verwenden" - beides landet am Ende hier.
+function loadPoints(points, label) {
+  if (points.length < 5) {
+    throw new Error('Zu wenige gültige Datenpunkte. Erwartet werden Zeilen mit "Frequenz dB".');
+  }
+  state.points = points;
+  el.filename.textContent = label;
+  const dataMin = clamp(Math.round(points[0].freq), 20, 20000);
+  const dataMax = clamp(Math.round(points[points.length - 1].freq), 20, 20000);
+  el.fMin.value = dataMin;
+  el.fMax.value = dataMax;
+  el.computeBtn.disabled = false;
+  showError('');
+  runFit();
+}
+
+function readFileAsText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error(`"${file.name}" konnte nicht gelesen werden.`));
+    reader.readAsText(file);
+  });
+}
+
+function handleFile(file) {
+  if (!file) return;
+  readFileAsText(file)
+    .then((text) => {
+      const points = parseFrequencyFile(text);
+      loadPoints(points, file.name + ` (${points.length} Punkte)`);
+    })
+    .catch((err) => showError(err.message || String(err)));
+}
+
+el.dropzone.addEventListener('click', () => el.fileInput.click());
+el.fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+['dragenter', 'dragover'].forEach((evt) =>
+  el.dropzone.addEventListener(evt, (e) => { e.preventDefault(); el.dropzone.classList.add('drag'); })
+);
+['dragleave', 'drop'].forEach((evt) =>
+  el.dropzone.addEventListener(evt, (e) => { e.preventDefault(); el.dropzone.classList.remove('drag'); })
+);
+el.dropzone.addEventListener('drop', (e) => {
+  const file = e.dataTransfer.files && e.dataTransfer.files[0];
+  handleFile(file);
+});
+
+// --- Schritt 1: mehrere Messungen zusammenführen ---------------------------
+
+async function addMergeFiles(fileList) {
+  const files = Array.from(fileList || []);
+  for (const file of files) {
+    try {
+      const text = await readFileAsText(file);
+      const points = parseFrequencyFile(text);
+      if (points.length < 5) {
+        showError(`"${file.name}": zu wenige gültige Datenpunkte, übersprungen.`);
+        continue;
+      }
+      mergeState.files.push({ name: file.name, points });
+    } catch (err) {
+      showError(err.message || String(err));
+    }
+  }
+  renderMerge();
+}
+
+function renderMerge() {
+  const hasFiles = mergeState.files.length > 0;
+  el.mergeControls.style.display = hasFiles ? 'flex' : 'none';
+  el.mergeMethodNote.style.display = hasFiles ? 'block' : 'none';
+  el.mergeChart.style.display = hasFiles ? 'block' : 'none';
+
+  el.mergeFileList.innerHTML = '';
+  mergeState.files.forEach((f, i) => {
+    const li = document.createElement('li');
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'file-name';
+    nameSpan.textContent = f.name;
+    const pointsSpan = document.createElement('span');
+    pointsSpan.className = 'file-points';
+    pointsSpan.textContent = `${f.points.length} Punkte`;
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'row-remove';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Entfernen';
+    removeBtn.addEventListener('click', () => {
+      mergeState.files.splice(i, 1);
+      renderMerge();
+    });
+    li.append(nameSpan, pointsSpan, removeBtn);
+    el.mergeFileList.appendChild(li);
+  });
+
+  if (!hasFiles) {
+    mergeState.grid = null;
+    mergeState.merged = null;
+    return;
+  }
+
+  const grid = buildLogGrid();
+  const curves = mergeState.files.map((f) => resampleToGrid(f.points, grid));
+  const merged = aggregateCurves(curves, el.mergeMethod.value);
+  mergeState.grid = grid;
+  mergeState.merged = merged;
+  drawMergeChart(el.mergeChart, { grid, curves, merged });
+}
+
+function downloadTextFile(filename, text) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+el.mergeDropzone.addEventListener('click', () => el.mergeFileInput.click());
+el.mergeFileInput.addEventListener('change', (e) => {
+  addMergeFiles(e.target.files);
+  e.target.value = ''; // erlaubt erneutes Hinzufügen derselben Datei
+});
+['dragenter', 'dragover'].forEach((evt) =>
+  el.mergeDropzone.addEventListener(evt, (e) => { e.preventDefault(); el.mergeDropzone.classList.add('drag'); })
+);
+['dragleave', 'drop'].forEach((evt) =>
+  el.mergeDropzone.addEventListener(evt, (e) => { e.preventDefault(); el.mergeDropzone.classList.remove('drag'); })
+);
+el.mergeDropzone.addEventListener('drop', (e) => addMergeFiles(e.dataTransfer.files));
+
+el.mergeMethod.addEventListener('change', renderMerge);
+
+el.mergeDownloadBtn.addEventListener('click', () => {
+  if (!mergeState.merged) return;
+  const methodLabel = el.mergeMethod.value === 'mean' ? 'Mittelwert' : 'Median';
+  const names = mergeState.files.map((f) => f.name).join(', ');
+  const lines = [
+    '# Zusammengeführte Frequenzgang-Kurve (PEQ Generator)',
+    `# ${methodLabel} aus ${mergeState.files.length} Kurven: ${names}`,
+  ];
+  for (let i = 0; i < mergeState.grid.length; i++) {
+    lines.push(`${mergeState.grid[i].toFixed(2)} ${mergeState.merged[i].toFixed(2)}`);
+  }
+  downloadTextFile('merged_curve.txt', lines.join('\n'));
+});
+
+el.mergeUseBtn.addEventListener('click', () => {
+  if (!mergeState.merged) return;
+  const points = mergeState.grid.map((f, i) => ({ freq: f, db: mergeState.merged[i] }));
+  const methodLabel = el.mergeMethod.value === 'mean' ? 'Mittelwert' : 'Median';
+  try {
+    loadPoints(points, `Zusammengeführt (${methodLabel}, ${mergeState.files.length} Kurven)`);
+    el.dropzone.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+});
+
+el.computeBtn.addEventListener('click', runFit);
+
+function runFit() {
+  if (!state.points) return;
+  showError('');
+  const fMin = clamp(Number(el.fMin.value) || 20, 20, 20000);
+  const fMax = clamp(Number(el.fMax.value) || 20000, 20, 20000);
+  const numBands = clamp(Math.round(Number(el.numBands.value) || 8), 1, 40);
+  el.fMin.value = fMin;
+  el.fMax.value = fMax;
+  el.numBands.value = numBands;
+
+  try {
+    const result = fitPeq(state.points, { fMin, fMax, numBands });
+    state.bands = result.bands;
+    state.grid = result.grid;
+    state.measured = result.measured;
+    state.target = result.target;
+    renderAll();
+  } catch (err) {
+    showError(err.message || String(err));
+  }
+}
+
+function renderAll() {
+  const hasData = !!state.grid;
+  el.emptyHint.style.display = hasData ? 'none' : 'block';
+  el.chart.style.display = hasData ? 'block' : 'none';
+  el.tableWrap.style.display = hasData ? 'block' : 'none';
+  el.exportPanel.style.display = hasData ? 'block' : 'none';
+  if (!hasData) return;
+
+  const filterSum = sumBandsOnGrid(state.bands, state.grid);
+  const corrected = state.measured.map((v, i) => v + filterSum[i]);
+
+  drawChart(el.chart, {
+    grid: state.grid,
+    measured: state.measured,
+    corrected,
+    filterSum,
+    fMin: Number(el.fMin.value),
+    fMax: Number(el.fMax.value),
+    bands: state.bands,
+  });
+
+  renderTable();
+  el.exportText.value = bandsToEqualizerApoText(state.bands);
+}
+
+function renderTable() {
+  el.bandsBody.innerHTML = '';
+  state.bands.forEach((band, i) => {
+    const tr = document.createElement('tr');
+
+    const freqInput = makeNumberInput(band.freq, 20, 20000, 1, 0, (v) => { band.freq = v; renderDerivedOnly(); });
+    const gainInput = makeNumberInput(band.gain, GAIN_MIN, GAIN_MAX, 1, 0, (v) => { band.gain = v; renderDerivedOnly(); });
+    const qInput = makeNumberInput(band.q, Q_MIN, Q_MAX, 0.1, 1, (v) => { band.q = v; renderDerivedOnly(); });
+
+    const idxTd = document.createElement('td');
+    idxTd.textContent = i + 1;
+
+    const freqTd = document.createElement('td'); freqTd.appendChild(freqInput);
+    const gainTd = document.createElement('td'); gainTd.appendChild(gainInput);
+    const qTd = document.createElement('td'); qTd.appendChild(qInput);
+
+    const actionsTd = document.createElement('td');
+    actionsTd.className = 'actions';
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'row-remove';
+    removeBtn.textContent = '✕';
+    removeBtn.title = 'Band entfernen';
+    removeBtn.addEventListener('click', () => {
+      state.bands.splice(i, 1);
+      renderAll();
+    });
+    actionsTd.appendChild(removeBtn);
+
+    tr.append(idxTd, freqTd, gainTd, qTd, actionsTd);
+    el.bandsBody.appendChild(tr);
+  });
+}
+
+// decimals: 0 für Freq/Gain (ganze Zahlen), 1 für Q (eine Nachkommastelle)
+function makeNumberInput(value, min, max, step, decimals, onChange) {
+  const factor = Math.pow(10, decimals);
+  const roundIt = (v) => Math.round(v * factor) / factor;
+  const input = document.createElement('input');
+  input.type = 'number';
+  input.min = min;
+  input.max = max;
+  input.step = step;
+  input.value = roundIt(value);
+  input.addEventListener('change', () => {
+    const v = roundIt(clamp(Number(input.value) || 0, min, max));
+    input.value = v;
+    onChange(v);
+  });
+  return input;
+}
+
+// Bei manueller Bearbeitung nur Chart + Export neu zeichnen, nicht neu fitten
+function renderDerivedOnly() {
+  if (!state.grid) return;
+  const filterSum = sumBandsOnGrid(state.bands, state.grid);
+  const corrected = state.measured.map((v, i) => v + filterSum[i]);
+  drawChart(el.chart, {
+    grid: state.grid,
+    measured: state.measured,
+    corrected,
+    filterSum,
+    fMin: Number(el.fMin.value),
+    fMax: Number(el.fMax.value),
+    bands: state.bands,
+  });
+  el.exportText.value = bandsToEqualizerApoText(state.bands);
+}
+
+el.addBandBtn.addEventListener('click', () => {
+  if (!state.grid) return;
+  const fMin = Number(el.fMin.value), fMax = Number(el.fMax.value);
+  const centerFreq = Math.round(Math.sqrt(fMin * fMax));
+  state.bands.push({ freq: clamp(centerFreq, 20, 20000), gain: 0, q: 1.4 });
+  state.bands.sort((a, b) => a.freq - b.freq);
+  renderAll();
+});
+
+el.copyBtn.addEventListener('click', async () => {
+  const text = el.exportText.value;
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (err) {
+    el.exportText.select();
+    document.execCommand('copy');
+  }
+  el.copiedNote.style.display = 'inline';
+  setTimeout(() => { el.copiedNote.style.display = 'none'; }, 1500);
+});
+
+window.addEventListener('resize', () => {
+  if (state.grid) renderDerivedOnly();
+  if (mergeState.merged) renderMerge();
+});
+</script>
+</body>
+</html>
